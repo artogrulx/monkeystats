@@ -1,0 +1,977 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Monkeytype | Ultimate Dashboard</title>
+<style>
+:root {
+  color-scheme: dark;
+  --bg: #071127;
+  --panel: #101e39;
+  --panel2: #142746;
+  --line: #263e62;
+  --text: #eaf5ff;
+  --muted: #8fa8ca;
+  --cyan: #44dcff;
+  --blue: #5890ff;
+  --green: #54e6a8;
+  --yellow: #ffcf6b;
+  --red: #ff7b97;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  min-height: 100vh;
+  background:
+    radial-gradient(ellipse at 75% -10%, #164a91 0%, transparent 44%),
+    linear-gradient(135deg, #071127, #0b1831 65%, #071127);
+  font: 15px system-ui, -apple-system, sans-serif;
+  color: var(--text);
+}
+button, select, input { font: inherit; }
+button { cursor: pointer; }
+.layout {
+  max-width: 1480px;
+  margin: auto;
+  padding: 25px;
+}
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 28px;
+}
+.logo { display: flex; align-items: center; gap: 13px; }
+.logo-icon {
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  font-size: 25px;
+  background: linear-gradient(135deg, #1c91e7, #273c9c);
+  border: 1px solid #5d9dff;
+  border-radius: 15px;
+  box-shadow: 0 0 25px #178ce844;
+}
+.logo strong { font-size: 24px; letter-spacing: -.8px; }
+.logo strong span { color: var(--cyan); }
+.small { color: var(--muted); font-size: 12px; }
+.actions { display: flex; gap: 10px; align-items: center; }
+button, select {
+  background: #172b4c;
+  border: 1px solid #36527a;
+  color: var(--text);
+  padding: 10px 15px;
+  border-radius: 10px;
+}
+button:hover { border-color: var(--cyan); }
+button:disabled { opacity: .55; cursor: wait; }
+.primary {
+  background: linear-gradient(120deg, #168bc9, #385ed5);
+  border-color: #4da8f8;
+  font-weight: 700;
+}
+.status {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.dot {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--yellow);
+}
+.dot.online { background: var(--green); box-shadow: 0 0 12px var(--green); }
+.dot.error { background: var(--red); }
+.profile {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  padding: 27px;
+  margin-bottom: 20px;
+  border: 1px solid #315a8b;
+  border-radius: 20px;
+  background: linear-gradient(110deg, #142f58, #101e39 70%);
+  box-shadow: 0 12px 40px #0002;
+}
+.avatar {
+  flex: none;
+  width: 82px;
+  height: 82px;
+  display: grid;
+  place-items: center;
+  border-radius: 22px;
+  background: linear-gradient(135deg, #1689f3, #5937ac);
+  font-size: 38px;
+  font-weight: 800;
+}
+.profile h1 { font-size: 27px; margin: 0 0 5px; }
+.profile p { color: var(--muted); margin: 0; }
+.profile-right { margin-left: auto; text-align: right; }
+.profile-right strong { color: var(--cyan); font-size: 23px; }
+.grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 20px;
+}
+.card {
+  min-width: 0;
+  background: linear-gradient(150deg, var(--panel), #0d1931);
+  border: 1px solid var(--line);
+  border-radius: 17px;
+  padding: 21px;
+}
+.metric-name {
+  color: var(--muted);
+  font-size: 13px;
+  margin-bottom: 13px;
+}
+.metric-value {
+  color: var(--cyan);
+  font-size: clamp(25px, 3vw, 39px);
+  font-weight: 800;
+  letter-spacing: -1px;
+  font-variant-numeric: tabular-nums;
+}
+.metric-note { color: var(--muted); font-size: 12px; margin-top: 8px; }
+.section-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(270px, 1fr);
+  gap: 18px;
+  margin-bottom: 20px;
+}
+.section-title {
+  font-size: 18px;
+  font-weight: 750;
+  margin: 0;
+}
+.section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 13px;
+  margin-bottom: 16px;
+}
+.controls { display: flex; flex-wrap: wrap; gap: 8px; }
+.controls select { padding: 8px 10px; }
+.chart-container { position: relative; width: 100%; height: 310px; }
+canvas { display: block; width: 100%; height: 100%; }
+.legend { display: flex; gap: 20px; color: var(--muted); font-size: 12px; }
+.legend b { font-size: 18px; vertical-align: middle; }
+.bar-row { margin: 18px 0; }
+.bar-label {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13px;
+  margin-bottom: 9px;
+}
+.track { height: 10px; border-radius: 10px; overflow: hidden; background: #283950; }
+.fill {
+  height: 100%;
+  width: 0;
+  border-radius: 10px;
+  background: linear-gradient(90deg, #3689ff, #48e0fd);
+  transition: width .35s;
+}
+.fill.green { background: linear-gradient(90deg, #229b94, #54e6a8); }
+.fill.yellow { background: linear-gradient(90deg, #e79735, #ffcf6b); }
+.info-box {
+  margin-top: 25px;
+  padding: 15px;
+  border-radius: 12px;
+  background: #152948;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.info-box strong { color: var(--text); }
+.pb-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 20px;
+}
+.pb-table, .history { width: 100%; border-collapse: collapse; }
+th {
+  color: var(--muted);
+  text-align: left;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 12px 10px;
+  white-space: nowrap;
+}
+td {
+  padding: 13px 10px;
+  border-top: 1px solid #263955;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+td strong { color: var(--cyan); }
+.table-wrap { overflow-x: auto; }
+.history { min-width: 650px; }
+.history tbody tr:hover { background: #152b4a; }
+.pill {
+  display: inline-block;
+  padding: 5px 9px;
+  border-radius: 20px;
+  background: #183f5f;
+  color: #87e0ff;
+  font-size: 11px;
+}
+.empty { color: var(--muted); text-align: center; padding: 30px 10px; }
+.notice {
+  display: none;
+  padding: 13px 16px;
+  margin-bottom: 20px;
+  border: 1px solid #9b6445;
+  background: #3a2b31;
+  border-radius: 12px;
+  color: #ffccac;
+  white-space: pre-wrap;
+}
+.footer {
+  text-align: center;
+  padding: 24px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.tooltip {
+  position: fixed;
+  z-index: 5;
+  pointer-events: none;
+  display: none;
+  padding: 10px 13px;
+  border-radius: 10px;
+  border: 1px solid #5181af;
+  background: #122341;
+  box-shadow: 0 8px 24px #0008;
+  color: #eaf5ff;
+  font-size: 12px;
+  line-height: 1.7;
+}
+@media(max-width: 1000px) {
+  .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .section-grid { grid-template-columns: 1fr; }
+}
+@media(max-width: 650px) {
+  .layout { padding: 14px; }
+  .grid { gap: 10px; }
+  .card { padding: 15px; }
+  .profile { padding: 17px; gap: 12px; }
+  .avatar { width: 58px; height: 58px; font-size: 26px; }
+  .profile h1 { font-size: 20px; }
+  .profile-right { display: none; }
+  .pb-grid { grid-template-columns: 1fr; }
+  .chart-container { height: 260px; }
+  .logo strong { font-size: 20px; }
+}
+</style>
+</head>
+<body>
+<div class="layout">
+  <header class="topbar">
+    <div class="logo">
+      <div class="logo-icon">⌨</div>
+      <div>
+        <strong>monkey<span>stats</span></strong>
+        <div class="small">Ultimate typing dashboard</div>
+      </div>
+    </div>
+    <div class="actions">
+      <span class="status"><i class="dot" id="dot"></i><span id="status">Connecting</span></span>
+      <button id="refresh" class="primary">↻ Refresh</button>
+    </div>
+  </header>
+
+  <div class="notice" id="notice"></div>
+
+  <section class="profile">
+    <div class="avatar" id="avatar">M</div>
+    <div>
+      <h1 id="username">Monkeytype User</h1>
+      <p id="accountInfo">Loading your typing profile...</p>
+    </div>
+    <div class="profile-right">
+      <div class="small">CURRENT STREAK</div>
+      <strong id="streak">—</strong>
+      <div class="small">days</div>
+    </div>
+  </section>
+
+  <section class="grid">
+    <div class="card">
+      <div class="metric-name">AVERAGE SPEED</div>
+      <div class="metric-value" id="avgWpm">—</div>
+      <div class="metric-note">WPM across loaded tests</div>
+    </div>
+    <div class="card">
+      <div class="metric-name">BEST SPEED</div>
+      <div class="metric-value" id="bestWpm">—</div>
+      <div class="metric-note">Highest loaded result / record</div>
+    </div>
+    <div class="card">
+      <div class="metric-name">AVERAGE ACCURACY</div>
+      <div class="metric-value" id="accuracy">—</div>
+      <div class="metric-note">Accuracy across loaded tests</div>
+    </div>
+    <div class="card">
+      <div class="metric-name">COMPLETED TESTS</div>
+      <div class="metric-value" id="tests">—</div>
+      <div class="metric-note">Lifetime completed tests</div>
+    </div>
+    <div class="card">
+      <div class="metric-name">TIME TYPING</div>
+      <div class="metric-value" id="typingTime">—</div>
+      <div class="metric-note">Total active typing time</div>
+    </div>
+    <div class="card">
+      <div class="metric-name">AVG CONSISTENCY</div>
+      <div class="metric-value" id="consistency">—</div>
+      <div class="metric-note">Across loaded tests</div>
+    </div>
+    <div class="card">
+      <div class="metric-name">LAST TEST SPEED</div>
+      <div class="metric-value" id="lastWpm">—</div>
+      <div class="metric-note">Most recent completed test</div>
+    </div>
+    <div class="card">
+      <div class="metric-name">TEST COMPLETION RATE</div>
+      <div class="metric-value" id="completion">—</div>
+      <div class="metric-note">Completed / started</div>
+    </div>
+  </section>
+
+  <section class="section-grid">
+    <div class="card">
+      <div class="section-head">
+        <h2 class="section-title">Typing performance</h2>
+        <div class="controls">
+          <select id="chartMetric" aria-label="Chart metric">
+            <option value="wpm">WPM</option>
+            <option value="acc">Accuracy</option>
+            <option value="consistency">Consistency</option>
+          </select>
+          <select id="chartCount" aria-label="Number of tests">
+            <option value="20">Last 20</option>
+            <option value="50" selected>Last 50</option>
+            <option value="100">Last 100</option>
+            <option value="250">Last 250</option>
+          </select>
+        </div>
+      </div>
+      <div class="chart-container">
+        <canvas id="performanceChart" aria-label="Typing performance graph"></canvas>
+      </div>
+      <div class="legend">
+        <span><b style="color:var(--cyan)">●</b> Test result</span>
+        <span><b style="color:var(--yellow)">━</b> Average</span>
+      </div>
+      <p class="small">Move your mouse over the chart to inspect individual tests.</p>
+    </div>
+
+    <div class="card">
+      <h2 class="section-title">Performance breakdown</h2>
+      <div class="bar-row">
+        <div class="bar-label"><span>Accuracy</span><strong id="barAccText">—</strong></div>
+        <div class="track"><div class="fill" id="barAcc"></div></div>
+      </div>
+      <div class="bar-row">
+        <div class="bar-label"><span>Consistency</span><strong id="barConText">—</strong></div>
+        <div class="track"><div class="fill green" id="barCon"></div></div>
+      </div>
+      <div class="bar-row">
+        <div class="bar-label"><span>Completion rate</span><strong id="barCompText">—</strong></div>
+        <div class="track"><div class="fill yellow" id="barComp"></div></div>
+      </div>
+      <div class="info-box">
+        <strong>Latest result</strong>
+        <div id="latestDetails">Waiting for Monkeytype data...</div>
+      </div>
+      <div class="info-box">
+        <strong>Data coverage</strong>
+        <div id="coverage">Waiting for results...</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="pb-grid">
+    <div class="card">
+      <h2 class="section-title">Time mode personal bests</h2>
+      <div class="table-wrap">
+        <table class="pb-table">
+          <thead><tr><th>Duration</th><th>WPM</th><th>Accuracy</th></tr></thead>
+          <tbody id="timePB"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card">
+      <h2 class="section-title">Words mode personal bests</h2>
+      <div class="table-wrap">
+        <table class="pb-table">
+          <thead><tr><th>Words</th><th>WPM</th><th>Accuracy</th></tr></thead>
+          <tbody id="wordsPB"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="section-head">
+      <h2 class="section-title">Recent test history</h2>
+      <div class="controls">
+        <select id="modeFilter" aria-label="Filter test mode">
+          <option value="all">All modes</option>
+          <option value="time">Time</option>
+          <option value="words">Words</option>
+          <option value="quote">Quote</option>
+          <option value="custom">Custom</option>
+          <option value="zen">Zen</option>
+        </select>
+        <select id="sortOrder" aria-label="Sort test history">
+          <option value="newest">Newest first</option>
+          <option value="oldest">Oldest first</option>
+          <option value="fastest">Fastest first</option>
+          <option value="accurate">Most accurate</option>
+        </select>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table class="history">
+        <thead>
+          <tr>
+            <th>Date</th><th>Mode</th><th>WPM</th>
+            <th>Accuracy</th><th>Consistency</th><th>Language</th>
+          </tr>
+        </thead>
+        <tbody id="historyBody"></tbody>
+      </table>
+    </div>
+    <div id="historyFooter" class="small" style="margin-top:15px"></div>
+  </section>
+
+  <footer class="footer">
+    Monkeystats · Local Monkeytype dashboard ·
+    <span id="updated">Not updated yet</span>
+    <div>Data is retrieved from Monkeytype through your local Python server.</div>
+  </footer>
+</div>
+
+<div class="tooltip" id="tooltip"></div>
+
+<script>
+"use strict";
+
+const $ = id => document.getElementById(id);
+
+let dashboard = null;
+let results = [];
+let chartPoints = [];
+let chartArea = null;
+
+const number = value => {
+  if (value === null || value === undefined || value === "") return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+};
+
+const fmt = (value, digits = 1) => {
+  const n = number(value);
+  return n === null ? "—" : n.toFixed(digits);
+};
+
+const integer = value => {
+  const n = number(value);
+  return n === null ? "—" : Math.round(n).toLocaleString();
+};
+
+const mean = values => {
+  const valid = values.map(number).filter(v => v !== null);
+  if (!valid.length) return null;
+  return valid.reduce((a, b) => a + b, 0) / valid.length;
+};
+
+function timestamp(value) {
+  const n = number(value);
+  if (n === null) return 0;
+  return n < 1e11 ? n * 1000 : n;
+}
+
+function dateText(value) {
+  const t = timestamp(value);
+  return t ? new Date(t).toLocaleString() : "—";
+}
+
+function duration(seconds) {
+  const n = number(seconds);
+  if (n === null) return "—";
+  const hours = Math.floor(n / 3600);
+  const minutes = Math.floor((n % 3600) / 60);
+  return hours + "h " + minutes + "m";
+}
+
+function setText(id, value) {
+  $(id).textContent = String(value);
+}
+
+function setStatus(label, state) {
+  setText("status", label);
+  $("dot").className = "dot " + state;
+}
+
+function setBar(id, textId, value) {
+  const n = number(value);
+  $(id).style.width = n === null ? "0%" :
+    Math.max(0, Math.min(100, n)) + "%";
+  setText(textId, n === null ? "—" : fmt(n) + "%");
+}
+
+function normalizePB(value) {
+  if (Array.isArray(value)) {
+    return value
+      .filter(v => v && typeof v === "object")
+      .sort((a, b) => (number(b.wpm) || 0) - (number(a.wpm) || 0))[0] || null;
+  }
+  if (value && typeof value === "object") {
+    if (value.wpm !== undefined) return value;
+    const nested = Object.values(value).flatMap(v =>
+      Array.isArray(v) ? v : [v]
+    );
+    return normalizePB(nested);
+  }
+  return null;
+}
+
+function bestFromRecords(records) {
+  const values = [];
+
+  for (const group of Object.values(records || {})) {
+    if (!group || typeof group !== "object") continue;
+    for (const entry of Object.values(group)) {
+      const pb = normalizePB(entry);
+      if (pb && number(pb.wpm) !== null) values.push(number(pb.wpm));
+    }
+  }
+
+  return values.length ? Math.max(...values) : null;
+}
+
+function renderPB(mode, id, targets, suffix) {
+  const recordMap = dashboard.personalBests?.[mode] || {};
+  const body = $(id);
+  body.replaceChildren();
+
+  for (const target of targets) {
+    const pb = normalizePB(recordMap[target]);
+    const row = document.createElement("tr");
+
+    const values = [
+      target + suffix,
+      pb ? fmt(pb.wpm) : "—",
+      pb ? fmt(pb.acc) + "%" : "—"
+    ];
+
+    values.forEach((value, i) => {
+      const cell = document.createElement("td");
+      if (i === 1 && pb) {
+        const strong = document.createElement("strong");
+        strong.textContent = value;
+        cell.appendChild(strong);
+      } else {
+        cell.textContent = value;
+      }
+      row.appendChild(cell);
+    });
+
+    body.appendChild(row);
+  }
+}
+
+function updateDashboard(data) {
+  dashboard = data;
+  results = Array.isArray(data.results)
+    ? data.results.filter(v => v && typeof v === "object")
+    : [];
+
+  results.sort((a, b) => timestamp(b.timestamp) - timestamp(a.timestamp));
+
+  const stats = data.stats || data.profile?.typingStats || {};
+  const profile = data.profile || {};
+  const last = data.last || results[0] || {};
+  const speeds = results.map(r => r.wpm);
+  const accuracies = results.map(r => r.acc);
+  const consistencies = results.map(r => r.consistency);
+
+  const avgSpeed = mean(speeds);
+  const avgAccuracy = mean(accuracies);
+  const avgConsistency = mean(consistencies);
+
+  const completed = number(stats.completedTests) ??
+    number(stats.testsCompleted);
+  const started = number(stats.startedTests) ??
+    number(stats.testsStarted);
+
+  const completionRate = completed !== null && started !== null && started > 0
+    ? completed / started * 100 : null;
+
+  const bestResults = speeds.map(number).filter(v => v !== null);
+  const loadedBest = bestResults.length ? Math.max(...bestResults) : null;
+  const pbBest = bestFromRecords(data.personalBests || {});
+  const best = [loadedBest, pbBest].filter(v => v !== null);
+
+  const username = data.username || profile.name || last.name || "Monkeytype User";
+  setText("username", username);
+  setText("avatar", username.charAt(0).toUpperCase());
+
+  const accountParts = [];
+  if (profile.addedAt) {
+    accountParts.push("Joined " + new Date(timestamp(profile.addedAt))
+      .toLocaleDateString());
+  }
+  if (number(profile.xp) !== null) {
+    accountParts.push(integer(profile.xp) + " XP");
+  }
+  setText("accountInfo", accountParts.join(" · ") ||
+    "Your local typing performance center");
+
+  setText("streak", integer(profile.streak));
+  setText("avgWpm", fmt(avgSpeed));
+  setText("bestWpm", best.length ? fmt(Math.max(...best)) : "—");
+  setText("accuracy", avgAccuracy === null ? "—" : fmt(avgAccuracy) + "%");
+  setText("tests", integer(completed));
+  setText("typingTime", duration(stats.timeTyping));
+  setText("consistency", avgConsistency === null ? "—" :
+    fmt(avgConsistency) + "%");
+  setText("lastWpm", fmt(last.wpm));
+  setText("completion", completionRate === null ? "—" :
+    fmt(completionRate) + "%");
+
+  setBar("barAcc", "barAccText", avgAccuracy);
+  setBar("barCon", "barConText", avgConsistency);
+  setBar("barComp", "barCompText", completionRate);
+
+  const details = [];
+  if (last.mode) details.push(last.mode + " " + (last.mode2 || ""));
+  if (number(last.wpm) !== null) details.push(fmt(last.wpm) + " WPM");
+  if (number(last.acc) !== null) details.push(fmt(last.acc) + "% accuracy");
+  if (last.timestamp) details.push(dateText(last.timestamp));
+  setText("latestDetails", details.join(" · ") || "No recent test available");
+
+  setText("coverage", results.length +
+    " recent results retrieved. Averages and charts cover only these results, " +
+    "not your entire lifetime history.");
+
+  renderPB("time", "timePB", ["15", "30", "60", "120"], "s");
+  renderPB("words", "wordsPB", ["10", "25", "50", "100"], " words");
+  renderHistory();
+  drawChart();
+
+  setText("updated", "Updated " + new Date(data.updatedAt).toLocaleTimeString());
+
+  const errors = Object.entries(data.errors || {});
+  if (errors.length) {
+    const notice = errors.map(([name, msg]) => name + ": " + msg).join("\n");
+    $("notice").textContent = "Some API data could not be loaded:\n" + notice;
+    $("notice").style.display = "block";
+  } else {
+    $("notice").style.display = "none";
+  }
+}
+
+function renderHistory() {
+  const filter = $("modeFilter").value;
+  const order = $("sortOrder").value;
+
+  let rows = results.filter(r => filter === "all" || r.mode === filter);
+
+  rows = [...rows].sort((a, b) => {
+    if (order === "oldest") return timestamp(a.timestamp) - timestamp(b.timestamp);
+    if (order === "fastest") return (number(b.wpm) || 0) - (number(a.wpm) || 0);
+    if (order === "accurate") return (number(b.acc) || 0) - (number(a.acc) || 0);
+    return timestamp(b.timestamp) - timestamp(a.timestamp);
+  });
+
+  const body = $("historyBody");
+  body.replaceChildren();
+
+  if (!rows.length) {
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.colSpan = 6;
+    td.className = "empty";
+    td.textContent = "No test results available.";
+    tr.appendChild(td);
+    body.appendChild(tr);
+  }
+
+  rows.forEach(result => {
+    const tr = document.createElement("tr");
+    const values = [
+      dateText(result.timestamp),
+      (result.mode || "—") + " " + (result.mode2 || ""),
+      fmt(result.wpm),
+      number(result.acc) === null ? "—" : fmt(result.acc) + "%",
+      number(result.consistency) === null ? "—" :
+        fmt(result.consistency) + "%",
+      result.language || "—"
+    ];
+
+    values.forEach((value, i) => {
+      const td = document.createElement("td");
+      if (i === 1) {
+        const pill = document.createElement("span");
+        pill.className = "pill";
+        pill.textContent = value;
+        td.appendChild(pill);
+      } else if (i === 2) {
+        const strong = document.createElement("strong");
+        strong.textContent = value;
+        td.appendChild(strong);
+      } else {
+        td.textContent = value;
+      }
+      tr.appendChild(td);
+    });
+    body.appendChild(tr);
+  });
+
+  setText("historyFooter", "Showing " + rows.length +
+    " of " + results.length + " retrieved results");
+}
+
+function roundedRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, h, r);
+}
+
+function drawChart() {
+  const canvas = $("performanceChart");
+  const context = canvas.getContext("2d");
+  const bounds = canvas.getBoundingClientRect();
+
+  if (!bounds.width || !bounds.height) return;
+
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = Math.round(bounds.width * dpr);
+  canvas.height = Math.round(bounds.height * dpr);
+  context.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  const width = bounds.width;
+  const height = bounds.height;
+  context.clearRect(0, 0, width, height);
+
+  const pad = {left: 48, right: 16, top: 23, bottom: 35};
+  const plotW = width - pad.left - pad.right;
+  const plotH = height - pad.top - pad.bottom;
+
+  const metric = $("chartMetric").value;
+  const count = Number($("chartCount").value);
+
+  const data = results
+    .filter(r => number(r[metric]) !== null)
+    .slice(0, count)
+    .reverse();
+
+  chartPoints = [];
+  chartArea = null;
+
+  if (!data.length) {
+    context.fillStyle = "#8fa8ca";
+    context.font = "14px system-ui";
+    context.textAlign = "center";
+    context.fillText("No chart data available", width / 2, height / 2);
+    return;
+  }
+
+  const values = data.map(r => number(r[metric]));
+  const minValue = Math.min(...values);
+  const maxValue = Math.max(...values);
+  const spread = Math.max(5, maxValue - minValue);
+  const bottom = Math.max(0, minValue - spread * .15);
+  const top = maxValue + spread * .15;
+  const avg = mean(values);
+
+  const X = index => pad.left + (data.length === 1
+    ? plotW / 2 : index / (data.length - 1) * plotW);
+  const Y = value => pad.top + (top - value) / (top - bottom) * plotH;
+
+  context.font = "11px system-ui";
+  context.textAlign = "right";
+
+  for (let i = 0; i <= 4; i++) {
+    const y = pad.top + i / 4 * plotH;
+    const value = top - i / 4 * (top - bottom);
+
+    context.strokeStyle = "#29415c";
+    context.lineWidth = 1;
+    context.beginPath();
+    context.moveTo(pad.left, y);
+    context.lineTo(width - pad.right, y);
+    context.stroke();
+
+    context.fillStyle = "#8fa8ca";
+    context.fillText(value.toFixed(0), pad.left - 10, y + 4);
+  }
+
+  context.textAlign = "center";
+  for (let i = 0; i < 5; i++) {
+    const idx = Math.round(i / 4 * (data.length - 1));
+    context.fillStyle = "#8fa8ca";
+    context.fillText(String(idx + 1), X(idx), height - 12);
+  }
+
+  const points = data.map((r, i) => ({
+    x: X(i),
+    y: Y(number(r[metric])),
+    result: r,
+    value: number(r[metric])
+  }));
+  chartPoints = points;
+  chartArea = {left: pad.left, right: width - pad.right};
+
+  const gradient = context.createLinearGradient(0, pad.top, 0, height);
+  gradient.addColorStop(0, "rgba(68,220,255,.28)");
+  gradient.addColorStop(1, "rgba(68,220,255,0)");
+
+  context.beginPath();
+  context.moveTo(points[0].x, pad.top + plotH);
+  points.forEach(p => context.lineTo(p.x, p.y));
+  context.lineTo(points[points.length - 1].x, pad.top + plotH);
+  context.closePath();
+  context.fillStyle = gradient;
+  context.fill();
+
+  context.beginPath();
+  context.setLineDash([5, 5]);
+  context.moveTo(pad.left, Y(avg));
+  context.lineTo(width - pad.right, Y(avg));
+  context.strokeStyle = "#ffcf6b";
+  context.lineWidth = 1.5;
+  context.stroke();
+  context.setLineDash([]);
+
+  context.beginPath();
+  points.forEach((p, i) => {
+    if (i === 0) context.moveTo(p.x, p.y);
+    else context.lineTo(p.x, p.y);
+  });
+  context.strokeStyle = "#44dcff";
+  context.lineWidth = 2.5;
+  context.lineJoin = "round";
+  context.stroke();
+
+  if (points.length <= 50) {
+    points.forEach(p => {
+      context.beginPath();
+      context.arc(p.x, p.y, 3, 0, Math.PI * 2);
+      context.fillStyle = "#44dcff";
+      context.fill();
+    });
+  }
+}
+
+function showChartTooltip(event) {
+  if (!chartPoints.length || !chartArea) return;
+
+  const rect = $("performanceChart").getBoundingClientRect();
+  const mouseX = event.clientX - rect.left;
+
+  if (mouseX < chartArea.left - 10 || mouseX > chartArea.right + 10) {
+    $("tooltip").style.display = "none";
+    return;
+  }
+
+  const nearest = chartPoints.reduce((best, point) =>
+    Math.abs(point.x - mouseX) < Math.abs(best.x - mouseX)
+      ? point : best
+  );
+
+  const r = nearest.result;
+  const tooltip = $("tooltip");
+  tooltip.replaceChildren();
+
+  const lines = [
+    dateText(r.timestamp),
+    fmt(r.wpm) + " WPM",
+    fmt(r.acc) + "% accuracy",
+    fmt(r.consistency) + "% consistency",
+    (r.mode || "—") + " " + (r.mode2 || "")
+  ];
+
+  lines.forEach(line => {
+    const div = document.createElement("div");
+    div.textContent = line;
+    tooltip.appendChild(div);
+  });
+
+  tooltip.style.display = "block";
+  tooltip.style.left = Math.min(
+    event.clientX + 14, window.innerWidth - tooltip.offsetWidth - 10
+  ) + "px";
+  tooltip.style.top = Math.max(
+    8, Math.min(event.clientY - 20,
+    window.innerHeight - tooltip.offsetHeight - 8)
+  ) + "px";
+}
+
+async function loadDashboard(refresh = false) {
+  $("refresh").disabled = true;
+  setStatus("Syncing", "");
+
+  try {
+    const url = "/api/dashboard" + (refresh ? "?refresh=1" : "");
+    const response = await fetch(url, {cache: "no-store"});
+    const data = await response.json();
+
+    if (!response.ok || data.error) {
+      throw new Error(data.error || "HTTP " + response.status);
+    }
+
+    updateDashboard(data);
+
+    const errors = Object.keys(data.errors || {});
+    if (errors.length) {
+      setStatus("Partial data", "error");
+    } else {
+      setStatus("Connected", "online");
+    }
+  } catch (error) {
+    setStatus("Connection error", "error");
+    $("notice").textContent = "Dashboard error: " + error.message;
+    $("notice").style.display = "block";
+  } finally {
+    $("refresh").disabled = false;
+  }
+}
+
+$("refresh").addEventListener("click", () => loadDashboard(true));
+$("chartMetric").addEventListener("change", drawChart);
+$("chartCount").addEventListener("change", drawChart);
+$("modeFilter").addEventListener("change", renderHistory);
+$("sortOrder").addEventListener("change", renderHistory);
+$("performanceChart").addEventListener("mousemove", showChartTooltip);
+$("performanceChart").addEventListener("mouseleave", () => {
+  $("tooltip").style.display = "none";
+});
+
+let resizeFrame = 0;
+window.addEventListener("resize", () => {
+  cancelAnimationFrame(resizeFrame);
+  resizeFrame = requestAnimationFrame(drawChart);
+});
+
+loadDashboard();
+</script>
+</body>
+</html>
+

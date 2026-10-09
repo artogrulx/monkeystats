@@ -1,0 +1,7 @@
+.env
+.env.*
+key.MAMAMA
+*.pem
+__pycache__/
+*.pyc
+.venv/
