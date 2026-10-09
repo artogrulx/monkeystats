@@ -1,6 +1,6 @@
 
 #!/usr/bin/env python3
-
+import os
 import json
 import time
 import threading
@@ -10,11 +10,12 @@ import urllib.request
 from pathlib import Path
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+
 ROOT = Path(__file__).resolve().parent
 KEY_FILE = ROOT / "key.MAMAMA"
 API_BASE = "https://api.monkeytype.com"
-HOST = "127.0.0.1"
-PORT = 8001
+HOST = "0.0.0.0"
+PORT = int(os.environ.get("PORT", "8001"))
 
 CACHE_SECONDS = 90
 cache = {}
