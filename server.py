@@ -1,277 +1,290 @@
-
 #!/usr/bin/env python3
-import os
 import json
-import time
+import os
+import secrets
 import threading
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from pathlib import Path
+from collections import defaultdict, deque
+from http import cookies
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
-KEY_FILE = ROOT / "key.MAMAMA"
-API_BASE = "https://api.monkeytype.com"
-HOST = "0.0.0.0"
-PORT = int(os.environ.get("PORT", "8001"))
+HOST = '0.0.0.0'
+PORT = int(os.environ.get('PORT', '8001'))
+API_BASE = 'https://api.monkeytype.com'
+COOKIE_NAME = 'monkeystats_session'
+SESSION_SECONDS = 8 * 3600
+CACHE_SECONDS = 180
+REQUEST_BYTES_MAX = 4096
+IS_RENDER = bool(os.environ.get('RENDER_EXTERNAL_URL') or os.environ.get('RENDER'))
 
-CACHE_SECONDS = 90
-cache = {}
-cache_lock = threading.Lock()
-
-
-def get_key():
-    if not KEY_FILE.is_file():
-        raise RuntimeError("key.MAMAMA was not found")
-
-    key = KEY_FILE.read_text(encoding="utf-8").strip()
-
-    if not key:
-        raise RuntimeError("key.MAMAMA is empty")
-
-    return key
+sessions = {}
+caches = {}
+login_attempts = defaultdict(deque)
+lock = threading.RLock()
 
 
-def request_monkeytype(path, parameters=None):
-    if parameters:
-        path += "?" + urllib.parse.urlencode(parameters)
-
+def api_request(key, path, params=None):
+    if params:
+        path += '?' + urllib.parse.urlencode(params)
     request = urllib.request.Request(
         API_BASE + path,
-        headers={
-            "Authorization": "ApeKey " + get_key(),
-            "User-Agent": "MonkeytypeLocalDashboard/1.0",
-            "Accept": "application/json"
-        },
-        method="GET"
+        headers={'Authorization': 'ApeKey ' + key,
+                 'User-Agent': 'MonkeyStatsDashboard/3.0',
+                 'Accept': 'application/json'},
     )
-
     try:
-        with urllib.request.urlopen(request, timeout=15) as response:
-            payload = json.loads(response.read().decode("utf-8"))
-
+        with urllib.request.urlopen(request, timeout=18) as response:
+            payload = json.load(response)
         if isinstance(payload, dict):
-            return payload.get("data"), None
-
+            return payload.get('data'), None
         return payload, None
-
-    except urllib.error.HTTPError as error:
+    except urllib.error.HTTPError as exc:
         try:
-            payload = json.loads(error.read().decode("utf-8"))
-            message = payload.get("message", error.reason)
-        except (ValueError, UnicodeDecodeError):
-            message = error.reason
-
-        return None, "HTTP " + str(error.code) + ": " + str(message)
-
-    except urllib.error.URLError as error:
-        return None, "Connection error: " + str(error.reason)
-
-    except Exception as error:
-        return None, str(error)
+            payload = json.loads(exc.read().decode('utf-8'))
+            message = payload.get('message') or payload.get('error') or str(exc.reason)
+        except (ValueError, UnicodeError):
+            message = str(exc.reason)
+        return None, 'HTTP ' + str(exc.code) + ': ' + str(message)
+    except (urllib.error.URLError, TimeoutError):
+        return None, 'Monkeytype is temporarily unreachable'
+    except Exception:
+        return None, 'Unexpected Monkeytype response'
 
 
-def cached_request(name, path, parameters=None, refresh=False):
+def prune():
     now = time.time()
+    with lock:
+        for token in list(sessions):
+            if sessions[token]['expires'] <= now:
+                sessions.pop(token, None)
+                caches.pop(token, None)
+        for address in list(login_attempts):
+            q = login_attempts[address]
+            while q and now - q[0] > 900:
+                q.popleft()
+            if not q:
+                login_attempts.pop(address, None)
 
-    with cache_lock:
-        entry = cache.get(name)
 
-        if entry and not refresh and now - entry["saved"] < CACHE_SECONDS:
-            return entry["data"], entry["error"]
+def current_session(token):
+    with lock:
+        info = sessions.get(token)
+        if info and info['expires'] > time.time():
+            return info
+        sessions.pop(token, None)
+        caches.pop(token, None)
+        return None
 
-    data, error = request_monkeytype(path, parameters)
 
+def cached_request(token, key, name, path, params=None):
+    now = time.time()
+    with lock:
+        entry = caches.get(token, {}).get(name)
+        if entry and now - entry['saved'] < CACHE_SECONDS:
+            return entry['data'], None
+    data, error = api_request(key, path, params)
     if error is None:
-        with cache_lock:
-            cache[name] = {
-                "saved": time.time(),
-                "data": data,
-                "error": None
-            }
-
+        with lock:
+            if token in sessions:
+                caches.setdefault(token, {})[name] = {'saved': time.time(), 'data': data}
     return data, error
 
 
-def dashboard_data(refresh=False):
-    stats, stats_error = cached_request(
-        "stats", "/users/stats", refresh=refresh
-    )
-
-    results, results_error = cached_request(
-        "results", "/results",
-        {"limit": 250, "offset": 0},
-        refresh=refresh
-    )
-
-    last, last_error = cached_request(
-        "last", "/results/last", refresh=refresh
-    )
-
-    profile = None
-    profile_error = None
-
-    username = None
-
-    if isinstance(last, dict):
-        username = last.get("name")
-
-    if not username and isinstance(results, list):
-        for result in results:
-            if isinstance(result, dict) and result.get("name"):
-                username = result["name"]
-                break
-
-    if username:
-        encoded_name = urllib.parse.quote(str(username), safe="")
-
-        profile, profile_error = cached_request(
-            "profile_" + username,
-            "/users/" + encoded_name + "/profile",
-            refresh=refresh
-        )
-
-    personal_bests = None
-    personal_bests_error = None
-
-    if isinstance(profile, dict):
-        personal_bests = profile.get("personalBests")
-
-    if personal_bests is None:
-        personal_bests = {"time": {}, "words": {}}
-        pb_errors = []
-
-        for mode, targets in (
-            ("time", ("15", "30", "60", "120")),
-            ("words", ("10", "25", "50", "100"))
-        ):
-            for target in targets:
-                data, error = cached_request(
-                    "pb_" + mode + "_" + target,
-                    "/users/personalBests",
-                    {"mode": mode, "mode2": target},
-                    refresh=refresh
-                )
-
-                if error:
-                    pb_errors.append(error)
-                elif data is not None:
-                    personal_bests[mode][target] = data
-
-        if pb_errors:
-            personal_bests_error = pb_errors[0]
-
+def build_dashboard(token, key):
+    data = {}
     errors = {}
-
-    for name, error in (
-        ("stats", stats_error),
-        ("results", results_error),
-        ("last", last_error),
-        ("profile", profile_error),
-        ("personalBests", personal_bests_error)
+    for name, path, params in (
+        ('stats', '/users/stats', None),
+        ('results', '/results', {'limit': 250, 'offset': 0}),
+        ('last', '/results/last', None),
     ):
+        data[name], error = cached_request(token, key, name, path, params)
         if error:
             errors[name] = error
-
-    return {
-        "stats": stats,
-        "results": results,
-        "last": last,
-        "profile": profile,
-        "personalBests": personal_bests,
-        "username": username,
-        "errors": errors,
-        "updatedAt": int(time.time() * 1000)
-    }
+    last = data.get('last')
+    results = data.get('results')
+    username = last.get('name') if isinstance(last, dict) else None
+    if not username and isinstance(results, list):
+        username = next((v['name'] for v in results if isinstance(v, dict) and v.get('name')), None)
+    profile = None
+    if username:
+        path = '/users/' + urllib.parse.quote(str(username), safe='') + '/profile'
+        profile, error = cached_request(token, key, 'profile', path)
+        if error:
+            errors['profile'] = error
+    personal_bests = profile.get('personalBests') if isinstance(profile, dict) else None
+    if not isinstance(personal_bests, dict):
+        personal_bests = {'time': {}, 'words': {}}
+        for mode, targets in (('time', ('15', '30', '60', '120')),
+                              ('words', ('10', '25', '50', '100'))):
+            for target in targets:
+                name = 'pb_' + mode + '_' + target
+                pb, error = cached_request(token, key, name,
+                                           '/users/personalBests',
+                                           {'mode': mode, 'mode2': target})
+                if error:
+                    errors.setdefault('personalBests', error)
+                elif pb is not None:
+                    personal_bests[mode][target] = pb
+    data.update(profile=profile, username=username, personalBests=personal_bests,
+                errors=errors, updatedAt=int(time.time() * 1000))
+    return data
 
 
 class Handler(BaseHTTPRequestHandler):
-
-    def send_json(self, payload, status=200):
-        data = json.dumps(payload).encode("utf-8")
-
+    def send_bytes(self, body, mime, status=200, cookie=None):
         self.send_response(status)
-        self.send_header("Content-Type", "application/json; charset=utf-8")
-        self.send_header("Content-Length", str(len(data)))
-        self.send_header("Cache-Control", "no-store")
-        self.send_header("X-Content-Type-Options", "nosniff")
+        for name, value in (
+            ('Content-Type', mime), ('Content-Length', str(len(body))),
+            ('Cache-Control', 'no-store'), ('X-Content-Type-Options', 'nosniff'),
+            ('Referrer-Policy', 'no-referrer'), ('X-Frame-Options', 'DENY'),
+            ('Content-Security-Policy', "default-src 'self'; script-src 'self' 'unsafe-inline'; "
+             "style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; "
+             "frame-ancestors 'none'; object-src 'none'; base-uri 'none'; form-action 'self'"),
+        ):
+            self.send_header(name, value)
+        if cookie:
+            self.send_header('Set-Cookie', cookie)
         self.end_headers()
-        self.wfile.write(data)
+        self.wfile.write(body)
+
+    def send_json(self, obj, status=200, cookie=None):
+        self.send_bytes(json.dumps(obj).encode('utf-8'),
+                        'application/json; charset=utf-8', status, cookie)
+
+    def token(self):
+        try:
+            jar = cookies.SimpleCookie()
+            jar.load(self.headers.get('Cookie', ''))
+            item = jar.get(COOKIE_NAME)
+            return item.value if item else ''
+        except cookies.CookieError:
+            return ''
+
+    def cookie(self, value, delete=False):
+        jar = cookies.SimpleCookie()
+        jar[COOKIE_NAME] = value
+        jar[COOKIE_NAME]['path'] = '/'
+        jar[COOKIE_NAME]['httponly'] = True
+        jar[COOKIE_NAME]['samesite'] = 'Strict'
+        jar[COOKIE_NAME]['max-age'] = 0 if delete else SESSION_SECONDS
+        if IS_RENDER:
+            jar[COOKIE_NAME]['secure'] = True
+        return jar.output(header='').strip()
+
+    def valid_origin(self):
+        origin = self.headers.get('Origin', '')
+        host = self.headers.get('Host', '')
+        try:
+            parts = urllib.parse.urlsplit(origin)
+            return (parts.scheme in ('http', 'https') and
+                    parts.netloc.lower() == host.lower() and not parts.path and
+                    not parts.query and not parts.fragment)
+        except ValueError:
+            return False
 
     def do_GET(self):
-        parsed = urllib.parse.urlparse(self.path)
-        path = parsed.path
-
-        if path == "/api/dashboard":
-            query = urllib.parse.parse_qs(parsed.query)
-            refresh = query.get("refresh", ["0"])[0] == "1"
-
-            try:
-                self.send_json(dashboard_data(refresh))
-            except Exception as error:
-                self.send_json({"error": str(error)}, 500)
-
+        path = urllib.parse.urlsplit(self.path).path
+        if path == '/health':
+            self.send_json({'ok': True})
             return
-
-        if path == "/api/stats":
-            data, error = cached_request("stats", "/users/stats")
-
-            if error:
-                self.send_json({"error": error}, 502)
-            else:
-                self.send_json({"data": data})
-
+        if path in ('/', '/index.html'):
+            self.send_bytes((ROOT / 'index.html').read_bytes(), 'text/html; charset=utf-8')
             return
-
-        if path in ("/", "/index.html"):
-            file_path = ROOT / "index.html"
-
-            if not file_path.is_file():
-                self.send_json({"error": "index.html is missing"}, 404)
+        if path == '/favicon.ico':
+            self.send_bytes(b'', 'image/x-icon', 204)
+            return
+        if path in ('/api/session', '/api/dashboard', '/api/stats'):
+            token = self.token()
+            session = current_session(token)
+            if not session:
+                self.send_json({'authenticated': False, 'error': 'Login required'}, 401)
                 return
-
-            content = file_path.read_bytes()
-
-            self.send_response(200)
-            self.send_header("Content-Type", "text/html; charset=utf-8")
-            self.send_header("Content-Length", str(len(content)))
-            self.send_header("Cache-Control", "no-store")
-            self.send_header(
-                "Content-Security-Policy",
-                "default-src 'self'; style-src 'self' 'unsafe-inline'; "
-                "script-src 'self' 'unsafe-inline'; "
-                "connect-src 'self'; img-src 'self' data:; "
-                "object-src 'none'; base-uri 'none'"
-            )
-            self.end_headers()
-            self.wfile.write(content)
+            if path == '/api/session':
+                self.send_json({'authenticated': True})
+            elif path == '/api/dashboard':
+                try:
+                    self.send_json(build_dashboard(token, session['key']))
+                except Exception:
+                    self.send_json({'error': 'Dashboard temporarily unavailable'}, 502)
+            else:
+                result, error = cached_request(token, session['key'], 'stats', '/users/stats')
+                self.send_json({'error': error} if error else {'data': result},
+                               502 if error else 200)
             return
+        self.send_json({'error': 'Not found'}, 404)
 
-        self.send_json({"error": "Not found"}, 404)
+    def do_POST(self):
+        path = urllib.parse.urlsplit(self.path).path
+        if path not in ('/api/login', '/api/logout'):
+            self.send_json({'error': 'Not found'}, 404)
+            return
+        if not self.valid_origin():
+            self.send_json({'error': 'Invalid request origin'}, 403)
+            return
+        if path == '/api/logout':
+            token = self.token()
+            with lock:
+                sessions.pop(token, None)
+                caches.pop(token, None)
+            self.send_json({'success': True}, cookie=self.cookie('', True))
+            return
+        prune()
+        address = self.client_address[0]
+        if IS_RENDER:
+            # Render's reverse proxy sets the original client IP.
+            address = self.headers.get('X-Forwarded-For', address).split(',')[0].strip()[:100]
+        with lock:
+            attempts = login_attempts[address]
+            now = time.time()
+            while attempts and now - attempts[0] > 900:
+                attempts.popleft()
+            if len(attempts) >= 8:
+                self.send_json({'error': 'Too many attempts. Try again in 15 minutes.'}, 429)
+                return
+            attempts.append(now)
+        try:
+            size = int(self.headers.get('Content-Length', '0'))
+            if not (0 < size <= REQUEST_BYTES_MAX):
+                raise ValueError('Bad request size')
+            payload = json.loads(self.rfile.read(size).decode('utf-8'))
+            key = payload.get('apeKey') if isinstance(payload, dict) else None
+            if not isinstance(key, str):
+                raise ValueError('Missing key')
+            key = key.strip()
+            if not (8 <= len(key) <= 1024) or any(c.isspace() for c in key):
+                raise ValueError('Bad key format')
+        except (ValueError, UnicodeError):
+            self.send_json({'error': 'Enter a valid Ape Key'}, 400)
+            return
+        _, error = api_request(key, '/users/stats')
+        if error:
+            self.send_json({'error': error}, 401)
+            return
+        old = self.token()
+        token = secrets.token_urlsafe(40)
+        with lock:
+            sessions.pop(old, None)
+            caches.pop(old, None)
+            sessions[token] = {'key': key, 'expires': time.time() + SESSION_SECONDS}
+        self.send_json({'success': True}, cookie=self.cookie(token))
 
     def log_message(self, format_string, *args):
-        print(
-            "[" + self.log_date_time_string() + "] "
-            + format_string % args
-        )
+        # Never print submitted key material or session cookies.
+        print(self.command, urllib.parse.urlsplit(self.path).path, flush=True)
 
 
-if __name__ == "__main__":
-    print("Monkeytype Dashboard")
-    print("Directory:", ROOT)
-    print("URL: http://127.0.0.1:" + str(PORT))
-
-    if not KEY_FILE.is_file():
-        print("WARNING: key.MAMAMA was not found")
-
+if __name__ == '__main__':
+    print('MonkeyStats running on port', PORT, flush=True)
     server = ThreadingHTTPServer((HOST, PORT), Handler)
-
     try:
         server.serve_forever()
     except KeyboardInterrupt:
-        print("\nStopping server")
+        pass
     finally:
         server.server_close()
-

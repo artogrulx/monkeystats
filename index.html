@@ -276,10 +276,40 @@ td strong { color: var(--cyan); }
   .chart-container { height: 260px; }
   .logo strong { font-size: 20px; }
 }
+
+/* Sign-in overlay; original dashboard styling is unchanged. */
+.auth-screen { min-height: 100vh; display: grid; place-items: center; padding: 20px; }
+.auth-card { width: min(440px, 100%); padding: 34px; border: 1px solid #315a8b;
+  border-radius: 22px; background: linear-gradient(135deg, #142f58, #101e39);
+  box-shadow: 0 20px 70px #0008; }
+.auth-card h1 { margin: 12px 0 6px; font-size: 29px; }
+.auth-card h1 span { color: var(--cyan); }
+.auth-card p { color: var(--muted); line-height: 1.6; }
+.auth-card label { display: block; margin: 22px 0 8px; font-weight: 650; }
+.auth-card input { width: 100%; border: 1px solid #36527a; outline: none;
+  border-radius: 10px; padding: 14px; background: #09152b; color: #eaf5ff; }
+.auth-card input:focus { border-color: var(--cyan); }
+.auth-card button { margin-top: 14px; width: 100%; padding: 14px; }
+.auth-error { color: #ffadba !important; min-height: 24px; }
+.auth-hide { display: none !important; }
 </style>
 </head>
 <body>
-<div class="layout">
+<section id="authScreen" class="auth-screen">
+  <form class="auth-card" id="loginForm" autocomplete="off">
+    <div class="logo-icon">⌨</div>
+    <h1>monkey<span>stats</span></h1>
+    <p>Enter your Monkeytype Ape Key to see your private typing dashboard.</p>
+    <label for="apeKey">Monkeytype Ape Key</label>
+    <input id="apeKey" name="apeKey" type="password" required autocomplete="off"
+           spellcheck="false" placeholder="Paste your Ape Key" />
+    <button class="primary" id="loginButton" type="submit">Connect to Monkeytype →</button>
+    <p class="auth-error" id="loginError" role="alert"></p>
+    <p class="small">The key is sent over HTTPS to this site's Python server and held in
+      server memory for up to eight hours. It is not saved in your browser.</p>
+  </form>
+</section>
+<div class="layout auth-hide" id="dashboardScreen">
   <header class="topbar">
     <div class="logo">
       <div class="logo-icon">⌨</div>
@@ -291,6 +321,7 @@ td strong { color: var(--cyan); }
     <div class="actions">
       <span class="status"><i class="dot" id="dot"></i><span id="status">Connecting</span></span>
       <button id="refresh" class="primary">↻ Refresh</button>
+      <button id="logout" type="button">Log out</button>
     </div>
   </header>
 
@@ -461,9 +492,9 @@ td strong { color: var(--cyan); }
   </section>
 
   <footer class="footer">
-    Monkeystats · Local Monkeytype dashboard ·
+    Monkeystats · Monkeytype dashboard ·
     <span id="updated">Not updated yet</span>
-    <div>Data is retrieved from Monkeytype through your local Python server.</div>
+    <div>Statistics are retrieved from Monkeytype through the MonkeyStats server.</div>
   </footer>
 </div>
 
@@ -946,6 +977,10 @@ async function loadDashboard(refresh = false) {
       setStatus("Connected", "online");
     }
   } catch (error) {
+    if (error.message === "HTTP 401") {
+      showLogin("Session expired. Please connect again.");
+      return;
+    }
     setStatus("Connection error", "error");
     $("notice").textContent = "Dashboard error: " + error.message;
     $("notice").style.display = "block";
@@ -970,7 +1005,63 @@ window.addEventListener("resize", () => {
   resizeFrame = requestAnimationFrame(drawChart);
 });
 
-loadDashboard();
+function showLogin(message = "") {
+  $("dashboardScreen").classList.add("auth-hide");
+  $("authScreen").classList.remove("auth-hide");
+  $("apeKey").value = "";
+  $("loginError").textContent = message;
+  dashboard = null;
+  results = [];
+}
+
+function showDashboard() {
+  $("authScreen").classList.add("auth-hide");
+  $("dashboardScreen").classList.remove("auth-hide");
+  loadDashboard();
+}
+
+$("loginForm").addEventListener("submit", async event => {
+  event.preventDefault();
+  const key = $("apeKey").value.trim();
+  $("loginError").textContent = "";
+  $("loginButton").disabled = true;
+  try {
+    const response = await fetch("/api/login", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({apeKey: key})
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || "Login failed");
+    $("apeKey").value = "";
+    showDashboard();
+  } catch (error) {
+    $("loginError").textContent = error.message;
+  } finally {
+    $("loginButton").disabled = false;
+  }
+});
+
+$("logout").addEventListener("click", async () => {
+  try {
+    await fetch("/api/logout", {method: "POST", credentials: "same-origin"});
+  } finally {
+    showLogin();
+  }
+});
+
+async function initialize() {
+  try {
+    const response = await fetch("/api/session", {cache: "no-store"});
+    if (response.ok) showDashboard();
+    else showLogin();
+  } catch (error) {
+    showLogin("Unable to contact the server. Try refreshing.");
+  }
+}
+
+initialize();
 </script>
 </body>
 </html>
